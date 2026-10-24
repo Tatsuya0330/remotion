@@ -1,4 +1,8 @@
 import React, {forwardRef, useCallback, useContext} from 'react';
+import {
+	applyEditableBoxShadowOverrides,
+	EditableBoxShadowOverrides,
+} from './box-shadow-utils.js';
 import {resolveComponentIdentity} from './component-identity.js';
 import type {
 	JsxComponentIdentity,
@@ -12,6 +16,7 @@ import {
 	baseSchema,
 	borderRadiusSchema,
 	borderSchema,
+	boxShadowSchema,
 	captionsSchema,
 	childrenSchema,
 	cropSchema,
@@ -117,7 +122,9 @@ type InteractiveElementProps<Tag extends InteractiveTag> = Omit<
 	React.ComponentPropsWithoutRef<Tag>,
 	keyof InteractiveManagedProps
 > &
-	InteractiveManagedProps;
+	InteractiveManagedProps & {
+		readonly boxShadow?: EditableBoxShadowOverrides | null;
+	};
 
 type InteractiveElementComponent<Tag extends InteractiveTag> =
 	React.ComponentType<
@@ -169,6 +176,7 @@ const interactiveBorderElementSchema = {
 	...interactiveBackgroundElementSchema,
 	...borderSchema,
 	...borderRadiusSchema,
+	...boxShadowSchema,
 } as const satisfies InteractivitySchema;
 
 const interactiveTextElementSchema = {
@@ -587,10 +595,21 @@ const makeInteractiveElement = <Tag extends InteractiveTag>(
 			cropTop,
 			cropBottom,
 			style,
+			boxShadow,
 			...props
 		} = propsWithControls as Props & {
 			readonly controls: SequenceControls | undefined;
 		};
+
+		const composedBoxShadow = applyEditableBoxShadowOverrides({
+			baseValue:
+				typeof style?.boxShadow === 'string' ? style.boxShadow : undefined,
+			overrides: boxShadow ?? null,
+		});
+		const effectiveStyle =
+			composedBoxShadow === undefined
+				? style
+				: {...style, boxShadow: composedBoxShadow};
 
 		const {
 			effectivePremountFor,
@@ -609,7 +628,7 @@ const makeInteractiveElement = <Tag extends InteractiveTag>(
 			}),
 			premountFor: premountFor ?? null,
 			postmountFor: postmountFor ?? null,
-			style: style ?? null,
+			style: effectiveStyle ?? null,
 			styleWhilePremounted: styleWhilePremounted ?? null,
 			styleWhilePostmounted: styleWhilePostmounted ?? null,
 			hideWhilePremounted: 'opacity',
@@ -718,6 +737,7 @@ export const Interactive = {
 	backgroundSchema,
 	borderSchema,
 	borderRadiusSchema,
+	boxShadowSchema,
 	cropSchema,
 	svgPaintSchema,
 	svgStrokeSchema,

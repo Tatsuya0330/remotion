@@ -2,7 +2,7 @@ import {makeTransform, matrix3d} from '@remotion/animation-utils';
 import {visualControl} from '@remotion/studio';
 import {zColor, zMatrix, zTextarea} from '@remotion/zod-types';
 import React from 'react';
-import {AbsoluteFill} from 'remotion';
+import {AbsoluteFill, Interactive} from 'remotion';
 import {z} from 'zod';
 
 const Card: React.FC<{
@@ -357,6 +357,20 @@ export const VisualControls = () => {
 							borderRadius,
 						}}
 					/>
+				</Card>
+
+				<Card title="Interactive.Div box shadow" type="Interactive.Div">
+					<Interactive.Div
+						name="Box shadow target"
+						style={{
+							backgroundColor: 'white',
+							borderRadius: 8,
+							color: '#1a1a2e',
+							padding: '16px 24px',
+						}}
+					>
+						Shadow target
+					</Interactive.Div>
 				</Card>
 
 				{/* Enum */}

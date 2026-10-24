@@ -164,14 +164,19 @@ export const useTimelineExpandedTree = ({
 		Internals.VisualModeDragOverridesContext,
 	);
 	const {selectedItems} = useTimelineSelection();
-	// Runtime values only affect the tree through enum variants and array row
-	// heights. Animated field values subscribe in their editors instead.
+	// Runtime values affect the tree through enum variants and array row heights.
+	// Box shadow controls also derive their defaults from the base CSS value.
+	// Animated field values subscribe in their editors instead.
 	const structureKeys = useMemo(() => {
 		const keys = new Set<string>();
 		const schemas: InteractivitySchema[] = sequence.controls
 			? [sequence.controls.schema]
 			: [];
 		for (const schema of schemas) {
+			if (schema['boxShadow.offset'] && schema['style.boxShadow']) {
+				keys.add('style.boxShadow');
+			}
+
 			for (const [key, field] of Object.entries(schema)) {
 				if (field.type === 'enum') {
 					keys.add(key);

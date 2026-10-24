@@ -52,6 +52,7 @@ export type SchemaFieldGroup =
 	| 'background'
 	| 'border'
 	| 'border-radius'
+	| 'box-shadow'
 	| 'crop'
 	| 'text'
 	| 'layout';
@@ -69,6 +70,7 @@ export const SCHEMA_FIELD_GROUPS = [
 	{id: 'background', label: 'Background'},
 	{id: 'border', label: 'Border'},
 	{id: 'border-radius', label: 'Border radius'},
+	{id: 'box-shadow', label: 'Box shadow'},
 	{id: 'crop', label: 'Crop'},
 	{id: 'layout', label: 'Layout'},
 ] as const satisfies readonly SchemaFieldGroupInfo[];
@@ -152,6 +154,16 @@ const BORDER_FIELD_KEYS = new Set([
 	'style.borderColor',
 ]);
 
+const BOX_SHADOW_FIELD_KEYS = new Set([
+	'style.boxShadow',
+
+	'boxShadow.offset',
+	'boxShadow.blurRadius',
+	'boxShadow.spreadRadius',
+	'boxShadow.color',
+	'boxShadow.inset',
+]);
+
 const BACKGROUND_FIELD_KEYS = new Set(['style.backgroundColor']);
 
 const LAYOUT_FIELD_KEYS = new Set(['layout', 'premountFor']);
@@ -183,6 +195,10 @@ export const getSchemaFieldGroup = (key: string): SchemaFieldGroup => {
 
 	if (BORDER_RADIUS_FIELD_KEYS.has(key)) {
 		return 'border-radius';
+	}
+
+	if (BOX_SHADOW_FIELD_KEYS.has(key)) {
+		return 'box-shadow';
 	}
 
 	if (BORDER_FIELD_KEYS.has(key)) {
@@ -357,8 +373,15 @@ export const getFieldsToShow = ({
 		nodePath,
 	});
 
+	const baseBoxShadowValue = String(valuesDotNotation['style.boxShadow'] ?? '');
+	const parsedBoxShadow = Internals.parseEditableBoxShadow(baseBoxShadowValue);
+
 	const fields = Object.entries(activeSchema)
 		.map(([key, fieldSchema]): InteractivitySchemaFieldInfo | null => {
+			if (key === 'style.boxShadow') {
+				return null;
+			}
+
 			if (
 				BORDER_RADIUS_FIELD_KEYS.has(key) &&
 				borderRadiusFieldKeysToShow !== null &&
@@ -391,16 +414,49 @@ export const getFieldsToShow = ({
 				return null;
 			}
 
+			let resolvedFieldSchema = fieldSchema;
+			if (parsedBoxShadow !== null) {
+				if (fieldSchema.type === 'translate' && key === 'boxShadow.offset') {
+					resolvedFieldSchema = {
+						...fieldSchema,
+						default:
+							Internals.serializeEditableBoxShadowOffset(parsedBoxShadow),
+					};
+				} else if (
+					fieldSchema.type === 'number' &&
+					(key === 'boxShadow.blurRadius' || key === 'boxShadow.spreadRadius')
+				) {
+					const boxShadowDefault =
+						key === 'boxShadow.blurRadius'
+							? parsedBoxShadow.blurRadius.value
+							: parsedBoxShadow.spreadRadius.value;
+					resolvedFieldSchema = {...fieldSchema, default: boxShadowDefault};
+				} else if (fieldSchema.type === 'color' && key === 'boxShadow.color') {
+					resolvedFieldSchema = {
+						...fieldSchema,
+						default: parsedBoxShadow.color ?? 'rgba(0, 0, 0, 0.5)',
+					};
+				} else if (
+					fieldSchema.type === 'boolean' &&
+					key === 'boxShadow.inset'
+				) {
+					resolvedFieldSchema = {
+						...fieldSchema,
+						default: parsedBoxShadow.inset,
+					};
+				}
+			}
+
 			return {
 				kind: 'sequence-field',
 				key,
 				description: fieldSchema.description,
 				typeName,
 				rowHeight: getSchemaFieldRowHeight({
-					fieldSchema,
+					fieldSchema: resolvedFieldSchema,
 					value: valuesDotNotation[key],
 				}),
-				fieldSchema,
+				fieldSchema: resolvedFieldSchema,
 				group: getSchemaFieldGroup(key),
 			};
 		})

@@ -37,7 +37,17 @@ import type {
 	VideoConfigNumericExpression,
 	VideoConfigValues,
 } from 'remotion';
+import {Internals} from 'remotion';
 import {NoReactInternals} from 'remotion/no-react';
+import {
+	applyBoxShadowComponentOverride,
+	getBoxShadowComponentFromKey,
+	getBoxShadowComponentValue,
+	getStyleBoxShadowExpression,
+	parseBoxShadowTemplate,
+	serializeBoxShadowTemplate,
+	setStyleBoxShadowExpression,
+} from './box-shadow-template';
 import {
 	ensureRemotionImports,
 	ensureUseCurrentFrameHook,
@@ -1858,7 +1868,7 @@ const shouldRemovePropAfterKeyframeOperation = ({
 	videoConfigValues: VideoConfigIdentifierValues;
 	ast: File;
 }) => {
-	if (operation.type !== 'remove' || !schema) {
+	if (key.startsWith('boxShadow.') || operation.type !== 'remove' || !schema) {
 		return false;
 	}
 
@@ -1932,15 +1942,108 @@ const createMissingPropExpression = (
 	return parseValueExpression(missingPropInitialValue.value) as Expression;
 };
 
+const getBoxShadowWritableProp = ({
+	node,
+	key,
+}: {
+	node: JSXOpeningElement;
+	key: string;
+}): WritableProp => {
+	const component = getBoxShadowComponentFromKey(key);
+	if (!component) {
+		throw new Error(
+			`Cannot update keyframes: unsupported box shadow key "${key}"`,
+		);
+	}
+
+	const sourceExpression = getStyleBoxShadowExpression(node);
+	const parsed = sourceExpression
+		? parseBoxShadowTemplate(sourceExpression)
+		: {
+				shadow: Internals.createDefaultBoxShadow(),
+				expressions: {},
+			};
+	if (!parsed) {
+		throw new Error('Cannot update keyframes: style.boxShadow is computed');
+	}
+
+	const expression =
+		parsed.expressions[component] ??
+		(parseValueExpression(
+			getBoxShadowComponentValue(parsed.shadow, component),
+		) as Expression);
+
+	const writeShadow = (
+		shadow: typeof parsed.shadow,
+		expressions: typeof parsed.expressions,
+	) => {
+		if (
+			!setStyleBoxShadowExpression(
+				node,
+				serializeBoxShadowTemplate(shadow, expressions),
+			)
+		) {
+			throw new Error('Cannot update keyframes: style prop is computed');
+		}
+	};
+
+	return {
+		expression,
+		setExpression: (nextExpression) => {
+			const nextExpressions = {...parsed.expressions};
+			let nextShadow = parsed.shadow;
+			const isInterpolation =
+				nextExpression.type === 'CallExpression' &&
+				nextExpression.callee.type === 'Identifier' &&
+				(nextExpression.callee.name === 'interpolate' ||
+					nextExpression.callee.name === 'interpolateColors');
+			if (isInterpolation) {
+				nextExpressions[component] = nextExpression as Expression;
+			} else if (isStaticValue(nextExpression as Expression)) {
+				delete nextExpressions[component];
+				const value = extractStaticValue(nextExpression as Expression);
+				const updatedShadow = applyBoxShadowComponentOverride({
+					shadow: parsed.shadow,
+					component,
+					value: value as string | number | boolean,
+				});
+
+				if (!updatedShadow) {
+					throw new Error('Cannot update keyframes: invalid box shadow value');
+				}
+
+				nextShadow = updatedShadow;
+			} else {
+				throw new Error(
+					'Cannot update keyframes: box shadow value is computed',
+				);
+			}
+
+			writeShadow(nextShadow, nextExpressions);
+		},
+		remove: () => {
+			const nextExpressions = {...parsed.expressions};
+			delete nextExpressions[component];
+			writeShadow(parsed.shadow, nextExpressions);
+		},
+	};
+};
+
 const getSequenceWritableProp = ({
+	node,
 	attributes,
 	key,
 	missingPropInitialValue,
 }: {
+	node: JSXOpeningElement;
 	attributes: (JSXAttribute | JSXSpreadAttribute)[];
 	key: string;
 	missingPropInitialValue: MissingPropInitialValue | null;
 }): WritableProp => {
+	if (key.startsWith('boxShadow.')) {
+		return getBoxShadowWritableProp({node, key});
+	}
+
 	const dotIndex = key.indexOf('.');
 	if (dotIndex === -1) {
 		const {attrIndex, attr: topLevelAttr} = findJsxAttribute(attributes, key);
@@ -2148,6 +2251,7 @@ export const updateSequenceKeyframesAst = ({
 	const newValueStrings: string[] = [];
 	for (const update of updates) {
 		const prop = getSequenceWritableProp({
+			node,
 			attributes: node.attributes,
 			key: update.key,
 			missingPropInitialValue:

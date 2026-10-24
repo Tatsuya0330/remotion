@@ -95,6 +95,35 @@ test('updateSequenceProps should update a number value', async () => {
 	expect(output.split('\n')[8]).toContain('hueShift={30}');
 });
 
+test('updateSequenceProps writes box shadow edits to style.boxShadow', async () => {
+	const input = `import {Interactive} from 'remotion';
+
+export const Example = () => (
+	<Interactive.Div
+		style={{boxShadow: '0px 30px 80px 0px rgba(37, 99, 235, 0.35)'}}
+	/>
+);
+`;
+	const {output} = await updateSequenceProps({
+		videoConfigValues: null,
+		input,
+		nodePath: lineColumnToNodePath(input, 4),
+		updates: [{key: 'boxShadow.blurRadius', value: 85.2, defaultValue: 0}],
+		schema: {
+			'boxShadow.offset': {type: 'translate', default: '0px 0px'},
+			'boxShadow.blurRadius': {
+				type: 'number',
+				default: 0,
+				hiddenFromList: false,
+			},
+		},
+		prettierConfigOverride: null,
+	});
+
+	expect(output).toContain('85.2px');
+	expect(output).not.toContain('boxShadow={{');
+});
+
 test('updateSequenceProps should migrate border shorthand to longhands', async () => {
 	const input = `import {AbsoluteFill} from 'remotion';
 

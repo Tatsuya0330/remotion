@@ -33,6 +33,35 @@ test('border longhand fields keyframe width and color, but not style', () => {
 	).toBe(true);
 });
 
+test('box shadow offsets share one keyframe track; other options stay independent', () => {
+	const schema = Interactive.boxShadowSchema;
+	for (const key of [
+		'boxShadow.offset',
+		'boxShadow.blurRadius',
+		'boxShadow.spreadRadius',
+		'boxShadow.color',
+		'boxShadow.inset',
+	]) {
+		expect(isSchemaFieldKeyframable({schema, key})).toBe(true);
+	}
+
+	expect('boxShadow.offsetX' in schema).toBe(false);
+	expect('boxShadow.offsetY' in schema).toBe(false);
+	expect('boxShadow.enabled' in schema).toBe(false);
+	expect(isSchemaFieldKeyframable({schema, key: 'style.boxShadow'})).toBe(
+		false,
+	);
+	expect(
+		getKeyframeInterpolationFunctionForSchemaField({
+			schema,
+			key: 'boxShadow.offset',
+		}),
+	).toBe('interpolate');
+	expect(
+		getKeyframeOutputTypeForSchemaField({schema, key: 'boxShadow.offset'}),
+	).toBe('translate');
+});
+
 test('background color is keyframable', () => {
 	expect(
 		isSchemaFieldKeyframable({

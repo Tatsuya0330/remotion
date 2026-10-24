@@ -449,6 +449,52 @@ export const backgroundSchema = {
 	},
 } as const satisfies InteractivitySchema;
 
+export const boxShadowSchema = {
+	'style.boxShadow': {
+		type: 'string',
+		default: '',
+		description: 'Shadow',
+		keyframable: false,
+	},
+
+	'boxShadow.offset': {
+		type: 'translate',
+		default: '0px 0px',
+		step: 0.1,
+		description: 'Offset',
+		keyframable: true,
+	},
+	'boxShadow.blurRadius': {
+		type: 'number',
+		default: 0,
+		min: 0,
+		step: 0.1,
+		description: 'Blur',
+		hiddenFromList: false,
+		keyframable: true,
+	},
+	'boxShadow.spreadRadius': {
+		type: 'number',
+		default: 0,
+		step: 0.1,
+		description: 'Spread',
+		hiddenFromList: false,
+		keyframable: true,
+	},
+	'boxShadow.color': {
+		type: 'color',
+		default: 'rgba(0, 0, 0, 0.5)',
+		description: 'Color',
+		keyframable: true,
+	},
+	'boxShadow.inset': {
+		type: 'boolean',
+		default: false,
+		description: 'Inset',
+		keyframable: true,
+	},
+} as const satisfies InteractivitySchema;
+
 const svgColorSchema = {
 	color: {
 		type: 'color',

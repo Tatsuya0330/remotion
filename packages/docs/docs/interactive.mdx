@@ -148,6 +148,14 @@ When `style.borderRadius` is a number or contains one to four pixel values, the 
 
 Use it for components that accept a `style` prop and render rounded corners.
 
+### `Interactive.boxShadowSchema`<AvailableFrom v="4.0.539" />
+
+Controls for `style.boxShadow` through `boxShadow.offset`, `boxShadow.blurRadius`, `boxShadow.spreadRadius`, `boxShadow.color` and `boxShadow.inset`.
+
+These fields let you edit the shadow without replacing the full CSS value. Use them to adjust one component while keeping the others intact.
+
+Use it for components that render a CSS box shadow.
+
 ### `Interactive.svgPaintSchema`<AvailableFrom v="4.0.499" />
 
 Controls for the SVG `fill`, `stroke` and `strokeWidth` props. The `color` prop is available from <AvailableFrom v="4.0.507" inline /> and controls paint values that use `currentColor`.

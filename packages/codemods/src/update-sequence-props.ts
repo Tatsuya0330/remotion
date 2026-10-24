@@ -5,6 +5,7 @@ import type {
 	JSXFragment,
 	JSXOpeningElement,
 	JSXSpreadAttribute,
+	ObjectExpression,
 	ObjectProperty,
 	StringLiteral,
 	Expression,
@@ -23,7 +24,17 @@ import type {
 	SequenceNodePath,
 	VideoConfigValues,
 } from 'remotion';
+import {Internals} from 'remotion';
 import {NoReactInternals} from 'remotion/no-react';
+import {
+	applyBoxShadowComponentOverride,
+	getBoxShadowComponentFromKey,
+	getBoxShadowComponentValue,
+	getStyleBoxShadowExpression,
+	parseBoxShadowTemplate,
+	serializeBoxShadowTemplate,
+	setStyleBoxShadowExpression,
+} from './box-shadow-template';
 import {
 	captureFunctionSourceSnapshots,
 	getFunctionSourceEditsForPrependedStatements,
@@ -1001,6 +1012,209 @@ const migrateCssShorthand = ({
 	}
 };
 
+const readStaticBoxShadowOverride = (
+	expression: Expression,
+): string | number | boolean | null => {
+	switch (expression.type) {
+		case 'StringLiteral':
+		case 'NumericLiteral':
+		case 'BooleanLiteral':
+			return expression.value;
+		case 'UnaryExpression':
+			if (
+				expression.argument.type === 'NumericLiteral' &&
+				(expression.operator === '-' || expression.operator === '+')
+			) {
+				return expression.operator === '-'
+					? -expression.argument.value
+					: expression.argument.value;
+			}
+
+			return null;
+		default:
+			return null;
+	}
+};
+
+const updateStaticBoxShadowProps = ({
+	node,
+	updates,
+	schema,
+}: {
+	node: JSXOpeningElement;
+	updates: SequencePropUpdate[];
+	schema: InteractivitySchema;
+}): Map<string, string> => {
+	const oldValues = new Map<string, string>();
+	if (
+		!schema['boxShadow.offset'] ||
+		updates.some(({key}) => key === 'style.boxShadow')
+	) {
+		return oldValues;
+	}
+
+	const shadowUpdates = updates.flatMap((update) => {
+		const component = getBoxShadowComponentFromKey(update.key);
+		if (
+			!component ||
+			(typeof update.value !== 'string' &&
+				typeof update.value !== 'number' &&
+				typeof update.value !== 'boolean')
+		) {
+			return [];
+		}
+
+		if (
+			(component === 'offset' && typeof update.value !== 'string') ||
+			((component === 'blurRadius' || component === 'spreadRadius') &&
+				typeof update.value !== 'number') ||
+			(component === 'color' && typeof update.value !== 'string') ||
+			(component === 'inset' && typeof update.value !== 'boolean')
+		) {
+			return [];
+		}
+
+		return [{update, component, value: update.value}];
+	});
+	if (shadowUpdates.length === 0) {
+		return oldValues;
+	}
+
+	const styleExpression = getStyleBoxShadowExpression(node);
+	const parsedStyle = styleExpression
+		? parseBoxShadowTemplate(styleExpression)
+		: {
+				shadow: Internals.createDefaultBoxShadow(),
+				expressions: {},
+			};
+	if (!parsedStyle) {
+		return oldValues;
+	}
+
+	let {shadow} = parsedStyle;
+	const expressions = {...parsedStyle.expressions};
+	const migratedLegacyProperties = new Set<string>();
+	const legacyAttribute = node.attributes.find(
+		(attribute): attribute is JSXAttribute =>
+			attribute.type === 'JSXAttribute' &&
+			attribute.name.type === 'JSXIdentifier' &&
+			attribute.name.name === 'boxShadow',
+	);
+	const legacyObject =
+		legacyAttribute?.value?.type === 'JSXExpressionContainer' &&
+		legacyAttribute.value.expression.type === 'ObjectExpression'
+			? (legacyAttribute.value.expression as ObjectExpression)
+			: null;
+	if (legacyAttribute && !legacyObject) {
+		return oldValues;
+	}
+
+	for (const property of legacyObject?.properties ?? []) {
+		if (property.type !== 'ObjectProperty') {
+			continue;
+		}
+
+		const propertyName =
+			property.key.type === 'Identifier'
+				? property.key.name
+				: property.key.type === 'StringLiteral'
+					? property.key.value
+					: null;
+		const component = propertyName
+			? getBoxShadowComponentFromKey(`boxShadow.${propertyName}`)
+			: null;
+		if (!propertyName || !component) {
+			continue;
+		}
+
+		const staticValue = readStaticBoxShadowOverride(
+			property.value as Expression,
+		);
+		if (staticValue !== null) {
+			const nextShadow = applyBoxShadowComponentOverride({
+				shadow,
+				component,
+				value: staticValue,
+			});
+			if (nextShadow) {
+				shadow = nextShadow;
+				migratedLegacyProperties.add(propertyName);
+			}
+		} else if (
+			property.value.type === 'CallExpression' &&
+			property.value.callee.type === 'Identifier' &&
+			(property.value.callee.name === 'interpolate' ||
+				property.value.callee.name === 'interpolateColors')
+		) {
+			expressions[component] = property.value as Expression;
+			migratedLegacyProperties.add(propertyName);
+		}
+	}
+
+	for (const {update, component, value} of shadowUpdates) {
+		const oldValue = expressions[component]
+			? recast.print(expressions[component]!).code
+			: getBoxShadowComponentValue(shadow, component);
+		oldValues.set(
+			update.key,
+			typeof oldValue === 'string'
+				? JSON.stringify(oldValue)
+				: String(oldValue),
+		);
+
+		const nextShadow = applyBoxShadowComponentOverride({
+			shadow,
+			component,
+			value,
+		});
+		if (!nextShadow) {
+			return new Map();
+		}
+
+		shadow = nextShadow;
+		delete expressions[component];
+	}
+
+	if (
+		!setStyleBoxShadowExpression(
+			node,
+			serializeBoxShadowTemplate(shadow, expressions),
+		)
+	) {
+		return new Map();
+	}
+
+	if (legacyObject && legacyAttribute) {
+		for (let index = legacyObject.properties.length - 1; index >= 0; index--) {
+			const property = legacyObject.properties[index];
+			const propertyName =
+				property.type === 'ObjectProperty' && property.key.type === 'Identifier'
+					? property.key.name
+					: property.type === 'ObjectProperty' &&
+						  property.key.type === 'StringLiteral'
+						? property.key.value
+						: null;
+			if (
+				property.type === 'ObjectProperty' &&
+				propertyName &&
+				(migratedLegacyProperties.has(propertyName) ||
+					shadowUpdates.some(({component}) => component === propertyName))
+			) {
+				legacyObject.properties.splice(index, 1);
+			}
+		}
+
+		if (legacyObject.properties.length === 0) {
+			const index = node.attributes.indexOf(legacyAttribute);
+			if (index !== -1) {
+				node.attributes.splice(index, 1);
+			}
+		}
+	}
+
+	return oldValues;
+};
+
 const updateSequencePropsNode = ({
 	jsxElement,
 	updates,
@@ -1028,6 +1242,11 @@ const updateSequencePropsNode = ({
 
 	const oldValueStrings: string[] = [];
 	const initialAttrs = snapshotTopLevelAttrs(node);
+	const oldBoxShadowValues = updateStaticBoxShadowProps({
+		node,
+		updates,
+		schema,
+	});
 	const updatedTopLevelKeys = new Set(
 		updates.map(({key}) => {
 			const dot = key.indexOf('.');
@@ -1070,6 +1289,11 @@ const updateSequencePropsNode = ({
 
 	for (const {key, value, defaultValue, clipboardParam} of updates) {
 		let oldValueString = '';
+
+		if (oldBoxShadowValues.has(key)) {
+			oldValueStrings.push(oldBoxShadowValues.get(key)!);
+			continue;
+		}
 
 		if (key === 'children') {
 			oldValueString = updateJsxTextContent({jsxElement, value});

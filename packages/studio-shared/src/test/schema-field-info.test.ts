@@ -1,5 +1,6 @@
 import {expect, test} from 'bun:test';
 import {
+	Interactive,
 	Internals,
 	type EffectDefinition,
 	type SequencePropsSubscriptionKey,
@@ -403,6 +404,73 @@ test('groups Sequence crop controls into the Crop inspector section', () => {
 	expect(
 		['cropLeft', 'cropRight', 'cropTop', 'cropBottom'].map(getSchemaFieldGroup),
 	).toEqual(['crop', 'crop', 'crop', 'crop']);
+});
+
+test('box shadow controls use the existing CSS shadow as their initial values', () => {
+	const baseValue = 'inset 2em -3em 4em -1em rgba(20, 30, 40, 0.5)';
+	const fields = getFieldsToShow({
+		schema: Interactive.boxShadowSchema,
+		currentRuntimeValueDotNotation: {'style.boxShadow': baseValue},
+		getDragOverrides: () => ({}),
+		propStatuses: {
+			[Internals.makeSequencePropsSubscriptionKey(nodePath)]: {
+				durationDependentKeyframes: null,
+				canUpdate: true,
+				props: {
+					'style.boxShadow': {
+						status: 'static',
+						keyframeDisplayOffsetAdjustment: null,
+						codeValue: baseValue,
+					},
+				},
+				effects: [],
+			},
+		},
+		nodePath,
+	});
+
+	expect(
+		fields?.find((field) => field.key === 'boxShadow.offset')?.fieldSchema
+			.default,
+	).toBe('2em -3em');
+	expect(
+		fields?.find((field) => field.key === 'boxShadow.blurRadius')?.fieldSchema
+			.default,
+	).toBe(4);
+	expect(
+		fields?.find((field) => field.key === 'boxShadow.spreadRadius')?.fieldSchema
+			.default,
+	).toBe(-1);
+	expect(
+		fields?.find((field) => field.key === 'boxShadow.color')?.fieldSchema
+			.default,
+	).toBe('rgba(20, 30, 40, 0.5)');
+	expect(
+		fields?.find((field) => field.key === 'boxShadow.inset')?.fieldSchema
+			.default,
+	).toBe(true);
+	expect(fields?.some((field) => field.key === 'style.boxShadow')).toBe(false);
+});
+
+test('groups box shadow controls into their own Inspector section', () => {
+	expect(
+		[
+			'style.boxShadow',
+
+			'boxShadow.offset',
+			'boxShadow.blurRadius',
+			'boxShadow.spreadRadius',
+			'boxShadow.color',
+			'boxShadow.inset',
+		].map(getSchemaFieldGroup),
+	).toEqual([
+		'box-shadow',
+		'box-shadow',
+		'box-shadow',
+		'box-shadow',
+		'box-shadow',
+		'box-shadow',
+	]);
 });
 
 test('groups border radius controls into their own inspector section', () => {

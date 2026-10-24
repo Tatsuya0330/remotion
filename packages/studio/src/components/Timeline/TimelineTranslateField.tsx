@@ -1,5 +1,6 @@
 import React, {useCallback, useContext, useMemo, useState} from 'react';
 import type {CanUpdateSequencePropStatusStatic} from 'remotion';
+import {Internals} from 'remotion';
 import type {
 	SchemaFieldInfo,
 	TimelineFieldOnDragValueChange,
@@ -33,6 +34,17 @@ const containerStyle: React.CSSProperties = {
 
 const translateDragSensitivity = 3;
 
+type ParsedTranslateCoordinate = {
+	readonly value: number;
+	readonly unit: string;
+};
+
+type ParsedTranslateField = readonly [
+	ParsedTranslateCoordinate,
+	ParsedTranslateCoordinate,
+	ParsedTranslateCoordinate | null,
+];
+
 export const TimelineTranslateField: React.FC<{
 	readonly field: SchemaFieldInfo;
 	readonly propStatus: CanUpdateSequencePropStatusStatic;
@@ -53,14 +65,23 @@ export const TimelineTranslateField: React.FC<{
 	const [dragZ, setDragZ] = useState<number | null>(null);
 	const transform3DMode = useContext(Transform3DModeContext);
 
-	const parsedTranslate = useMemo(
-		() => parseTranslateWithUnits(String(effectiveValue ?? '0px 0px')),
-		[effectiveValue],
-	);
+	const parsedTranslate = useMemo((): ParsedTranslateField | null => {
+		const value = String(effectiveValue ?? '0px 0px');
+		if (field.key === 'boxShadow.offset') {
+			const parsedShadow = Internals.parseEditableBoxShadow(value);
+			return parsedShadow
+				? [parsedShadow.offsetX, parsedShadow.offsetY, null]
+				: null;
+		}
+
+		return parseTranslateWithUnits(value);
+	}, [effectiveValue, field.key]);
 	const codeX = parsedTranslate?.[0].value ?? 0;
 	const codeY = parsedTranslate?.[1].value ?? 0;
 	const codeZ = parsedTranslate?.[2]?.value ?? null;
-	const show3D = transform3DMode || (codeZ !== null && codeZ !== 0);
+	const show3D =
+		field.key !== 'boxShadow.offset' &&
+		(transform3DMode || (codeZ !== null && codeZ !== 0));
 
 	const configuredStep =
 		field.fieldSchema.type === 'translate' ? field.fieldSchema.step : undefined;
@@ -76,7 +97,7 @@ export const TimelineTranslateField: React.FC<{
 	);
 
 	const formatCoordinate = useCallback(
-		(v: number | string, unit: 'px' | '%') => {
+		(v: number | string, unit: string) => {
 			return `${formatTimelineNumber({
 				decimalPlaces,
 				fixed: false,
@@ -87,16 +108,22 @@ export const TimelineTranslateField: React.FC<{
 	);
 	const serialize = useCallback(
 		(x: number, y: number, z = dragZ ?? codeZ) => {
+			const xUnit = parsedTranslate?.[0].unit ?? 'px';
+			const yUnit = parsedTranslate?.[1].unit ?? 'px';
+			if (field.key === 'boxShadow.offset') {
+				return `${formatCoordinate(x, xUnit)} ${formatCoordinate(y, yUnit)}`;
+			}
+
 			return serializeTranslateWithUnits(
 				[
-					{value: x, unit: parsedTranslate?.[0].unit ?? 'px'},
-					{value: y, unit: parsedTranslate?.[1].unit ?? 'px'},
+					{value: x, unit: xUnit as 'px' | '%'},
+					{value: y, unit: yUnit as 'px' | '%'},
 					z === null ? null : {value: z, unit: 'px'},
 				],
 				decimalPlaces,
 			);
 		},
-		[codeZ, decimalPlaces, dragZ, parsedTranslate],
+		[codeZ, decimalPlaces, dragZ, field.key, formatCoordinate, parsedTranslate],
 	);
 
 	// --- X callbacks ---

@@ -1318,6 +1318,121 @@ test('updateSequenceKeyframes converts static translate to interpolate', async (
 	expect(output).toContain('interpolate');
 });
 
+test('updateSequenceKeyframes adds keyframes to a box shadow translate offset', async () => {
+	const input = `import React from 'react';
+import {Interactive, interpolate, useCurrentFrame} from 'remotion';
+
+export const Example: React.FC = () => {
+	const frame = useCurrentFrame();
+	return (
+		<Interactive.Div
+			style={{
+				boxShadow: \`\${interpolate(
+					frame,
+					[0, 31],
+					['42.9px 36.9px', '69.7px 36.9px'],
+					{outputType: 'translate'},
+				)} 0px 0px red\`,
+			}}
+		/>
+	);
+};
+`;
+	const schema = {
+		'boxShadow.offset': {
+			type: 'translate',
+			default: '0px 0px',
+		},
+	} satisfies InteractivitySchema;
+	const {output, updatedNodePath} = await updateSequenceKeyframes({
+		videoConfigValues: null,
+		input,
+		nodePath: lineColumnToNodePath(input, getLine(input, '<Interactive.Div')),
+		schema,
+		updates: [
+			{
+				key: 'boxShadow.offset',
+				operation: {type: 'add', frame: 15, value: '56.3px 36.9px'},
+			},
+		],
+	});
+
+	expect(output).toContain(
+		"interpolate(frame, [0, 15, 31], ['42.9px 36.9px', '56.3px 36.9px', '69.7px 36.9px'], {",
+	);
+	expect(output).toContain("outputType: 'translate'");
+	const status = computeSequencePropsStatusFromContent({
+		fileContents: output,
+		nodePath: updatedNodePath,
+		componentIdentity: null,
+		keys: ['boxShadow.offset'],
+		effects: [],
+	});
+	expect(status.props['boxShadow.offset']).toMatchObject({
+		status: 'keyframed',
+		interpolationFunction: 'interpolate',
+		keyframes: [
+			{frame: 0, value: '42.9px 36.9px'},
+			{frame: 15, value: '56.3px 36.9px'},
+			{frame: 31, value: '69.7px 36.9px'},
+		],
+	});
+});
+
+test('updateSequenceKeyframes writes box shadow blur and color to style.boxShadow', async () => {
+	const input = `import React from 'react';
+import {Interactive} from 'remotion';
+
+export const Example: React.FC = () => (
+	<Interactive.Div style={{boxShadow: '0px 20px 60px 0px #f8fafc'}} />
+);
+`;
+	const schema = {
+		'boxShadow.offset': {type: 'translate', default: '0px 0px'},
+		'boxShadow.blurRadius': {
+			type: 'number',
+			default: 0,
+			hiddenFromList: false,
+		},
+		'boxShadow.color': {type: 'color', default: 'rgba(0, 0, 0, 0.5)'},
+	} satisfies InteractivitySchema;
+	const {output, updatedNodePath} = await updateSequenceKeyframes({
+		videoConfigValues: null,
+		input,
+		nodePath: lineColumnToNodePath(input, getLine(input, '<Interactive.Div')),
+		schema,
+		updates: [
+			{
+				key: 'boxShadow.blurRadius',
+				operation: {type: 'add', frame: 15, value: 90},
+			},
+			{
+				key: 'boxShadow.color',
+				operation: {type: 'add', frame: 15, value: '#2563eb'},
+			},
+		],
+	});
+
+	expect(output).toContain('interpolate(frame, [15], [90]');
+	expect(output).toContain("interpolateColors(frame, [15], ['#2563eb']");
+	expect(output).not.toContain('boxShadow={{');
+	const status = computeSequencePropsStatusFromContent({
+		fileContents: output,
+		nodePath: updatedNodePath,
+		componentIdentity: null,
+		keys: ['boxShadow.blurRadius', 'boxShadow.color'],
+		effects: [],
+	});
+	expect(status.props['boxShadow.blurRadius']).toMatchObject({
+		status: 'keyframed',
+		keyframes: [{frame: 15, value: 90}],
+	});
+	expect(status.props['boxShadow.color']).toMatchObject({
+		status: 'keyframed',
+		keyframes: [{frame: 15, value: '#2563eb'}],
+	});
+});
+
 test('updateSequenceKeyframes adds a missing nested prop before keyframing it', async () => {
 	const input = `import React from 'react';
 import {AbsoluteFill} from 'remotion';

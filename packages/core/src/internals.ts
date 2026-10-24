@@ -18,6 +18,13 @@ import {
 	useMediaStartsAt,
 } from './audio/use-audio-frame.js';
 import {useMediaAudioState} from './audio/use-media-audio-state.js';
+import {
+	applyEditableBoxShadowOverrides,
+	createDefaultBoxShadow,
+	parseEditableBoxShadow,
+	serializeEditableBoxShadow,
+	serializeEditableBoxShadowOffset,
+} from './box-shadow-utils.js';
 import {BufferingContextReact, BufferingProvider} from './buffering.js';
 import {calculateMediaDuration} from './calculate-media-duration.js';
 import {
@@ -378,6 +385,11 @@ export const Internals = {
 	makeRenderResourceManager,
 	RenderResourceManagerContext,
 	createRuntimeValueStore,
+	applyEditableBoxShadowOverrides,
+	createDefaultBoxShadow,
+	parseEditableBoxShadow,
+	serializeEditableBoxShadow,
+	serializeEditableBoxShadowOffset,
 	useUnsafeVideoConfig,
 	useFrameForVolumeProp,
 	useTimelinePosition: TimelinePosition.useTimelinePosition,

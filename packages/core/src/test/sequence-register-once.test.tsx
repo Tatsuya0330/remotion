@@ -330,6 +330,22 @@ test('Sequence timing changes update its registration without changing order', a
 	expect(getSequences().map((sequence) => sequence.id)).toEqual(initialIds);
 });
 
+test('Interactive composes keyframeable box-shadow parts over the CSS base value', () => {
+	const producer = render(
+		<SequenceTestWrapper onRegisterSequence={() => undefined}>
+			<Interactive.Div
+				data-testid="shadow"
+				style={{boxShadow: '2em 3em 4em 1em rgba(20, 30, 40, 0.5)'}}
+				boxShadow={{offset: '8em 9em', inset: true}}
+			/>
+		</SequenceTestWrapper>,
+	);
+
+	expect(producer.getByTestId('shadow').style.boxShadow).toBe(
+		'inset 8em 9em 4em 1em rgba(20, 30, 40, 0.5)',
+	);
+});
+
 test('Interactive runtime values update mounted consumers without re-registering the sequence', () => {
 	const registeredSequences: TSequence[] = [];
 	const onRegisterSequence = (sequence: TSequence) => {

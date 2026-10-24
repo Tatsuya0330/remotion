@@ -28,6 +28,12 @@ import type {
 	VideoConfigNumericExpression,
 } from 'remotion';
 import {NoReactInternals} from 'remotion/no-react';
+import {
+	getBoxShadowComponentFromKey,
+	getBoxShadowComponentValue,
+	getStyleBoxShadowExpression,
+	parseBoxShadowTemplate,
+} from './box-shadow-template';
 import {getReadOnlySourceSnapshot} from './sequence-props-snapshot';
 import {computeEffectPropStatus} from './sequence-props/can-update-effect-props';
 import {getCssShorthandForLonghand} from './sequence-props/css-shorthand-properties';
@@ -2231,6 +2237,27 @@ const computeSequenceOnlyPropsRecord = ({
 				? staticStatus(staticTextContent.value, null)
 				: computedStatus();
 			continue;
+		}
+
+		if (key.startsWith('boxShadow.')) {
+			const styleBoxShadowExpression = getStyleBoxShadowExpression(jsxElement);
+			if (styleBoxShadowExpression) {
+				const parsed = parseBoxShadowTemplate(styleBoxShadowExpression);
+				const component = getBoxShadowComponentFromKey(key);
+				if (!parsed || !component) {
+					filteredProps[key] = computedStatus();
+				} else {
+					const expression = parsed.expressions[component];
+					filteredProps[key] = expression
+						? getComputedStatus(expression, ast, videoConfigValues)
+						: staticStatus(
+								getBoxShadowComponentValue(parsed.shadow, component),
+								null,
+							);
+				}
+
+				continue;
+			}
 		}
 
 		const dotIndex = key.indexOf('.');
